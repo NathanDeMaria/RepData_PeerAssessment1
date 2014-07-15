@@ -1,20 +1,75 @@
 # Reproducible Research: Peer Assessment 1
 
-
 ## Loading and preprocessing the data
+```{r}
+suppressPackageStartupMessages(require(data.table))
+data <- fread('activity.csv')
+```
 
+## Histogram of Steps
+```{r}
+suppressPackageStartupMessages(require(ggplot2))
+ggplot(data) + geom_histogram(aes(steps), binwidth=30) + labs(x='Steps')
+```
 
-
-## What is mean total number of steps taken per day?
-
-
+## What are the mean and median number of steps taken per day?
+```{r}
+mean(data$steps, na.rm=T)
+median(data$steps, na.rm=T)
+```
 
 ## What is the average daily activity pattern?
-
-
+```{r}
+suppressPackageStartupMessages(require(dplyr))
+time <- data %>% group_by(interval) %>% summarise(steps=mean(steps, na.rm=T))
+ggplot(time, aes(interval, steps)) + geom_line() + labs(x='Time', y='Steps')
+highest <- time[which.max(steps),]$interval
+```
+Time interval `r highest` has the most steps
 
 ## Imputing missing values
+```{r}
+num_missing <- sum(is.na(data))
+```
+There are `r num_missing` missing values
 
+### Imputing missing values with the average value of steps for that day
+```{r}
+imputed_data <- copy(data)
+impute_step <- Vectorize(function(inter, steps) {
+	if(is.na(steps)) {
+		return(mean(data[interval == inter,]$steps, na.rm=T))
+	} else {
+		return(steps)
+	}
+})
+imputed_data[,steps:=impute_step(interval, steps)]
+```
 
+## Histogram of Imputed Steps
+```{r}
+ggplot(imputed_data) + geom_histogram(aes(steps), binwidth=30) + labs(x='Steps')
+```
+
+## Mean and median of imputed data
+```{r}
+mean(imputed_data$steps)
+median(imputed_data$steps)
+```
+These values are the same as before NA values were filled in.
+
+However, the number of steps has increased by `r (sum(imputed_data$steps) - sum(data$steps, na.rm=T)) / dim(data)[1]` per day
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+suppressPackageStartupMessages(require(lubridate))
+imputed_data[,date:=ymd(date)]
+imputed_data[,weekend:=as.factor(ifelse(
+		weekdays(date) == 'Sunday' | weekdays(date) == 'Saturday',
+		'weekend',
+		'weekday'
+	))]
+imputed_summary <- data.frame(imputed_data) %>% regroup(list('weekend', 'interval')) %>% summarise(steps=mean(steps))
+ggplot(imputed_summary, aes(interval, steps)) + geom_line() + facet_wrap(~weekend, ncol=1) + labs(x='Time', y='Steps')
+```
+
